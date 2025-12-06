@@ -1,0 +1,25 @@
+# Core dependencies
+python-dotenv==1.0.0
+pydantic==2.5.0
+
+# Image processing
+pdf2image==1.16.3
+Pillow==10.1.0
+
+# AI clients
+openai>=1.58.0
+anthropic==0.8.1
+
+# UI
+streamlit==1.29.0
+
+# Data export
+pandas==2.1.4
+openpyxl==3.1.2
+xlsxwriter==3.1.9
+
+# Testing
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+responses==0.24.1
