@@ -27,3 +27,28 @@ System działa w architekturze modularnej, bezstanowej (stateless):
 
 - **Prywatność:** Pliki są przetwarzane w pamięci RAM i usuwane natychmiast po ekstrakcji.
 - **Odporność:** System musi obsłużyć błędy API i "halucynacje" formatu JSON.
+- **Język:** Pełna polonizacja interfejsu użytkownika.
+
+## 5. Deployment & Hosting
+
+Aplikacja jest przygotowana do deployment na następujących platformach:
+
+### Opcja 1: Streamlit Community Cloud (Rekomendowana dla MVP/Demo)
+- **Koszt:** Darmowy tier
+- **Deployment:** Automatyczny z GitHub repo
+- **URL:** `https://{app-name}.streamlit.app`
+- **Wymagania:**
+  - Publiczne GitHub repository
+  - Plik `requirements.txt`
+  - Secrets configuration (XAI_API_KEY)
+- **Zalety:** Najprostszy deployment, idealny do testów z użytkownikami
+
+### Opcja 2: Render / Railway (Docker)
+- **Koszt:** Free tier dostępny
+- **Deployment:** Docker container
+- **Zalety:** Większa kontrola, więcej zasobów
+- **Wymagania:** Dockerfile, environment variables
+
+### Opcja 3: Własny serwer
+- **Koszt:** Zależy od providera
+- **Wymagania:** Python 3.10+, poppler-utils (dla PDF processing)

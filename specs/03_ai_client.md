@@ -24,7 +24,12 @@ Kod klienta musi być napisany w sposób umożliwiający zmianę dostawcy poprze
 
 Należy zainstalować `openai` (dla Groka) oraz opcjonalnie `anthropic`.
 
-- `pip install openai anthropic python-dotenv`
+- `pip install openai>=1.58.0 anthropic python-dotenv`
+
+**Uwaga o wersji OpenAI SDK:**
+- Minimalna wersja: `openai>=1.58.0`
+- Obecnie zainstalowana: `openai==2.9.0`
+- **Powód upgrade'u:** Starsza wersja `1.6.1` nie była kompatybilna z nowszym `httpx==0.28.x` (błąd `proxies` parameter). Upgrade do `2.9.0` rozwiązuje problem kompatybilności z zależnościami.
 
 ### Klasa `AIClient`
 
