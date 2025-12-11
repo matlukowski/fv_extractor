@@ -6,7 +6,8 @@ from PIL import Image
 from src.processors.image_processor import (
     prepare_image_for_api,
     UnsupportedFormatError,
-    CorruptedFileError
+    CorruptedFileError,
+    PasswordProtectedPDFError
 )
 
 
@@ -169,23 +170,90 @@ class TestErrorHandling:
 class TestPDFProcessing:
     """Test PDF file processing"""
 
-    @pytest.mark.skip(reason="PDF support requires pdf2image and poppler - will implement later")
-    def test_prepare_image_from_single_page_pdf(self):
-        """Should convert single-page PDF to image"""
-        # Will implement when pdf2image is properly set up
-        pass
+    def test_prepare_image_from_single_page_pdf(self, sample_pdf_buffer):
+        """Should convert single-page PDF to list with one base64 image"""
+        result = prepare_image_for_api(sample_pdf_buffer)
 
-    @pytest.mark.skip(reason="PDF support requires pdf2image and poppler")
-    def test_prepare_image_from_multipage_pdf(self):
-        """Should handle multi-page PDFs (extract first page or all pages)"""
-        # Will implement when pdf2image is properly set up
-        pass
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert isinstance(result[0], str)
 
-    @pytest.mark.skip(reason="PDF support requires pdf2image and poppler")
-    def test_password_protected_pdf_raises_error(self):
-        """Should raise clear error for password-protected PDFs"""
-        # Will implement when pdf2image is properly set up
-        pass
+        # Verify valid base64 → JPEG
+        decoded = base64.b64decode(result[0])
+        img = Image.open(BytesIO(decoded))
+        assert img.format == 'JPEG'
+        assert img.mode == 'RGB'
+        assert img.size[0] > 0 and img.size[1] > 0
+
+    def test_prepare_image_from_multipage_pdf(self, sample_multipage_pdf_buffer):
+        """Should convert all pages from multi-page PDF"""
+        result = prepare_image_for_api(sample_multipage_pdf_buffer)
+
+        assert isinstance(result, list)
+        assert len(result) == 3  # 3 pages
+
+        for i, image_b64 in enumerate(result):
+            assert isinstance(image_b64, str)
+            decoded = base64.b64decode(image_b64)
+            img = Image.open(BytesIO(decoded))
+            assert img.format == 'JPEG'
+            assert img.mode == 'RGB'
+
+    def test_password_protected_pdf_raises_error(self, password_protected_pdf_buffer):
+        """Should raise PasswordProtectedPDFError for encrypted PDFs without password"""
+        with pytest.raises(PasswordProtectedPDFError) as exc_info:
+            prepare_image_for_api(password_protected_pdf_buffer)
+
+        assert 'password' in str(exc_info.value).lower()
+
+    def test_password_protected_pdf_with_correct_password(
+        self,
+        password_protected_pdf_buffer,
+        sample_pdf_password
+    ):
+        """Should successfully process PDF with correct password"""
+        result = prepare_image_for_api(
+            password_protected_pdf_buffer,
+            password=sample_pdf_password
+        )
+
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert isinstance(result[0], str)
+
+        # Verify valid base64 → JPEG
+        decoded = base64.b64decode(result[0])
+        img = Image.open(BytesIO(decoded))
+        assert img.format == 'JPEG'
+
+    def test_password_protected_pdf_with_wrong_password(
+        self,
+        password_protected_pdf_buffer,
+        sample_pdf_wrong_password
+    ):
+        """Should raise PasswordProtectedPDFError with wrong password"""
+        with pytest.raises(PasswordProtectedPDFError) as exc_info:
+            prepare_image_for_api(
+                password_protected_pdf_buffer,
+                password=sample_pdf_wrong_password
+            )
+
+        assert 'invalid password' in str(exc_info.value).lower()
+
+    def test_password_protected_pdf_with_empty_password(
+        self,
+        password_protected_pdf_buffer
+    ):
+        """Should raise PasswordProtectedPDFError when password is empty string"""
+        with pytest.raises(PasswordProtectedPDFError) as exc_info:
+            prepare_image_for_api(
+                password_protected_pdf_buffer,
+                password=""
+            )
+
+        # Note: Empty string is tried automatically, if it fails then we need real password
+        # This test verifies we still get proper error for encrypted PDFs
+        assert 'password' in str(exc_info.value).lower()
 
 
 class TestEdgeCases:

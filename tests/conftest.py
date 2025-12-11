@@ -81,3 +81,99 @@ def text_file_buffer():
     buffer = BytesIO(b'This is a text file, not an image')
     buffer.seek(0)
     return buffer
+
+
+@pytest.fixture
+def sample_pdf_buffer():
+    """Create a single-page PDF for testing"""
+    try:
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import A4
+    except ImportError:
+        pytest.skip("reportlab not installed")
+
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    c.drawString(100, 750, "FAKTURA VAT")
+    c.drawString(100, 700, "Nr: FV001/2025")
+    c.drawString(100, 650, "Data: 2025-01-15")
+    c.drawString(100, 600, "Sprzedawca: Test Company")
+    c.drawString(100, 550, "NIP: 1234567890")
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+@pytest.fixture
+def sample_multipage_pdf_buffer():
+    """Create a 3-page PDF for testing"""
+    try:
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import A4
+    except ImportError:
+        pytest.skip("reportlab not installed")
+
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+
+    # Page 1
+    c.drawString(100, 750, "FAKTURA - Strona 1/3")
+    c.drawString(100, 700, "Nr: FV002/2025")
+    c.showPage()
+
+    # Page 2
+    c.drawString(100, 750, "Strona 2/3 - Pozycje")
+    c.drawString(100, 700, "1. Usługa - 5000 PLN")
+    c.showPage()
+
+    # Page 3
+    c.drawString(100, 750, "Strona 3/3")
+    c.drawString(100, 700, "Suma: 5000 PLN")
+    c.showPage()
+
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+@pytest.fixture
+def password_protected_pdf_buffer():
+    """Create password-protected PDF for testing"""
+    try:
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import A4
+        from PyPDF2 import PdfReader, PdfWriter
+    except ImportError:
+        pytest.skip("reportlab or PyPDF2 not installed")
+
+    # Create normal PDF
+    temp_buffer = BytesIO()
+    c = canvas.Canvas(temp_buffer, pagesize=A4)
+    c.drawString(100, 750, "Protected Invoice")
+    c.save()
+    temp_buffer.seek(0)
+
+    # Encrypt it
+    reader = PdfReader(temp_buffer)
+    writer = PdfWriter()
+    for page in reader.pages:
+        writer.add_page(page)
+    writer.encrypt(user_password="secret123")
+
+    encrypted_buffer = BytesIO()
+    writer.write(encrypted_buffer)
+    encrypted_buffer.seek(0)
+    return encrypted_buffer
+
+
+@pytest.fixture
+def sample_pdf_password():
+    """Password for protected PDF fixture"""
+    return "secret123"
+
+
+@pytest.fixture
+def sample_pdf_wrong_password():
+    """Wrong password for testing authentication failure"""
+    return "wrongpassword"

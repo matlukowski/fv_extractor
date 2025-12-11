@@ -4,6 +4,7 @@ from io import BytesIO
 from typing import List
 from PIL import Image
 import os
+import fitz  # PyMuPDF
 
 
 class UnsupportedFormatError(Exception):
@@ -16,15 +17,21 @@ class CorruptedFileError(Exception):
     pass
 
 
+class PasswordProtectedPDFError(Exception):
+    """Raised when PDF is password-protected and requires authentication"""
+    pass
+
+
 def prepare_image_for_api(
     file_buffer: BytesIO,
     max_size: int = 2000,
-    jpeg_quality: int = 85
+    jpeg_quality: int = 85,
+    password: str | None = None
 ) -> List[str]:
     """
     Prepare image(s) for AI Vision API by optimizing and encoding to base64.
 
-    Handles JPEG, PNG, and (future) PDF files. Images are:
+    Handles JPEG, PNG, and PDF files. Images are:
     - Resized if too large (max dimension = max_size)
     - Converted to JPEG format
     - Compressed with specified quality
@@ -34,6 +41,7 @@ def prepare_image_for_api(
         file_buffer: File buffer containing image or PDF
         max_size: Maximum dimension size in pixels (default: 2000)
         jpeg_quality: JPEG compression quality 0-100 (default: 85)
+        password: Optional password for encrypted PDFs (default: None)
 
     Returns:
         List of base64-encoded image strings (1 for images, N for PDF pages)
@@ -41,6 +49,7 @@ def prepare_image_for_api(
     Raises:
         UnsupportedFormatError: If file format is not supported
         CorruptedFileError: If file is corrupted or cannot be read
+        PasswordProtectedPDFError: If PDF is encrypted and password is missing/invalid
 
     Examples:
         >>> with open('invoice.jpg', 'rb') as f:
@@ -56,11 +65,25 @@ def prepare_image_for_api(
         file_type = _detect_file_type(file_buffer)
 
         if file_type == 'pdf':
-            # PDF support (future implementation)
-            raise UnsupportedFormatError(
-                "PDF support requires pdf2image library and poppler. "
-                "Currently only JPEG and PNG are supported."
-            )
+            # Convert all PDF pages to images
+            try:
+                pdf_images = _convert_pdf_to_images(file_buffer, dpi=300, password=password)
+
+                # Optimize each page individually
+                optimized_images = []
+                for img in pdf_images:
+                    optimized_b64 = _optimize_image(img, max_size, jpeg_quality)
+                    optimized_images.append(optimized_b64)
+
+                return optimized_images
+
+            except (UnsupportedFormatError, CorruptedFileError, PasswordProtectedPDFError):
+                raise
+            except ImportError:
+                raise UnsupportedFormatError(
+                    "PDF support requires PyMuPDF library. "
+                    "Install with: pip install PyMuPDF"
+                )
         elif file_type in ['jpeg', 'jpg', 'png']:
             # Load as image
             img = Image.open(file_buffer)
@@ -85,6 +108,8 @@ def prepare_image_for_api(
     except UnsupportedFormatError:
         raise
     except CorruptedFileError:
+        raise
+    except PasswordProtectedPDFError:
         raise
     except Exception as e:
         # Catch-all for PIL errors, file read errors, etc.
@@ -134,6 +159,102 @@ def _detect_file_type(buffer: BytesIO) -> str:
             return img.format.lower() if img.format else 'unknown'
         except:
             return 'unknown'
+
+
+def _convert_pdf_to_images(
+    pdf_buffer: BytesIO,
+    dpi: int = 300,
+    password: str | None = None
+) -> List[Image.Image]:
+    """
+    Convert PDF pages to PIL Images using PyMuPDF.
+
+    Converts ALL pages from PDF to high-quality images for AI processing.
+
+    Args:
+        pdf_buffer: BytesIO buffer containing PDF file
+        dpi: DPI for rendering (default: 300 for high quality OCR)
+        password: Optional password for encrypted PDFs (default: None)
+
+    Returns:
+        List of PIL Image objects (RGB mode), one per page
+
+    Raises:
+        CorruptedFileError: If PDF is corrupted or cannot be opened
+        PasswordProtectedPDFError: If PDF is encrypted and password is missing/invalid
+    """
+    pdf_buffer.seek(0)
+
+    try:
+        # Open PDF from buffer
+        pdf_document = fitz.open(stream=pdf_buffer.read(), filetype="pdf")
+
+        # Check if PDF is encrypted/password-protected
+        if pdf_document.is_encrypted:
+            # Try empty password first (common edge case)
+            if pdf_document.authenticate(""):
+                # Success with empty password - continue
+                pass
+            elif password is None:
+                # No password provided - need user input
+                pdf_document.close()
+                raise PasswordProtectedPDFError(
+                    "PDF is password-protected. Please provide password."
+                )
+            else:
+                # Try user-provided password
+                auth_result = pdf_document.authenticate(password)
+
+                if not auth_result:
+                    # Wrong password
+                    pdf_document.close()
+                    raise PasswordProtectedPDFError(
+                        "Invalid password. Please try again."
+                    )
+                # Password correct - continue processing
+
+        # Check for empty PDF
+        page_count = pdf_document.page_count
+        if page_count == 0:
+            pdf_document.close()
+            raise CorruptedFileError("PDF file has no pages")
+
+        # Convert each page to image
+        images = []
+        zoom = dpi / 72  # PyMuPDF uses 72 DPI as base
+        matrix = fitz.Matrix(zoom, zoom)
+
+        for page_num in range(page_count):
+            page = pdf_document[page_num]
+
+            # Render page to pixmap
+            pix = page.get_pixmap(matrix=matrix)
+
+            # Convert to PIL Image
+            img_data = pix.tobytes("png")
+            img = Image.open(BytesIO(img_data))
+
+            # Ensure RGB mode
+            if img.mode == 'RGBA':
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                background.paste(img, mask=img.split()[3])
+                img = background
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+
+            images.append(img)
+
+        pdf_document.close()
+        return images
+
+    except fitz.FileDataError as e:
+        raise CorruptedFileError(f"PDF file is corrupted or invalid: {str(e)}")
+    except PasswordProtectedPDFError:
+        raise
+    except UnsupportedFormatError:
+        raise
+    except Exception as e:
+        raise CorruptedFileError(f"Failed to process PDF: {str(e)}")
 
 
 def _optimize_image(

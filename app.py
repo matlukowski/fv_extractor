@@ -14,7 +14,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import our modules
-from src.processors.image_processor import prepare_image_for_api, UnsupportedFormatError, CorruptedFileError
+from src.processors.image_processor import (
+    prepare_image_for_api,
+    UnsupportedFormatError,
+    CorruptedFileError,
+    PasswordProtectedPDFError
+)
 from src.ai.grok_client import GrokClient
 from src.exporters.excel_exporter import export_to_excel
 from src.models.invoice_data import InvoiceData
@@ -49,6 +54,14 @@ def main():
         )
         return
 
+    # Initialize session state for encrypted PDF handling
+    if 'encrypted_pdf_buffer' not in st.session_state:
+        st.session_state.encrypted_pdf_buffer = None
+    if 'encrypted_pdf_filename' not in st.session_state:
+        st.session_state.encrypted_pdf_filename = None
+    if 'pdf_password_error' not in st.session_state:
+        st.session_state.pdf_password_error = None
+
     # File uploader
     st.markdown("### 1. Prześlij Fakturę")
     uploaded_file = st.file_uploader(
@@ -58,6 +71,13 @@ def main():
     )
 
     if uploaded_file:
+        # Clear encrypted PDF state if user uploads different file
+        if (st.session_state.encrypted_pdf_filename and
+            st.session_state.encrypted_pdf_filename != uploaded_file.name):
+            st.session_state.encrypted_pdf_buffer = None
+            st.session_state.encrypted_pdf_filename = None
+            st.session_state.pdf_password_error = None
+
         # Display file info
         col1, col2 = st.columns([2, 1])
 
@@ -72,6 +92,51 @@ def main():
             with st.expander("📸 Podgląd Obrazu", expanded=False):
                 st.image(uploaded_file, use_container_width=True)
 
+        # === PASSWORD PROTECTION HANDLING ===
+        if st.session_state.encrypted_pdf_buffer is not None:
+            st.markdown("---")
+            st.warning("🔒 **Ten PDF jest chroniony hasłem**")
+
+            # Show previous password error if any
+            if st.session_state.pdf_password_error:
+                st.error(st.session_state.pdf_password_error)
+
+            # Password input
+            col_pass1, col_pass2 = st.columns([3, 1])
+
+            with col_pass1:
+                pdf_password = st.text_input(
+                    "Wpisz hasło do pliku PDF:",
+                    type="password",
+                    key="pdf_password_input",
+                    help="Hasło jest potrzebne do odszyfrowania pliku"
+                )
+
+            with col_pass2:
+                st.write("")  # Spacing
+                st.write("")
+                unlock_button = st.button(
+                    "🔓 Odszyfruj i Analizuj",
+                    type="primary",
+                    use_container_width=True,
+                    disabled=not pdf_password  # Disable if empty
+                )
+
+            # Process with password
+            if unlock_button and pdf_password:
+                process_encrypted_pdf_with_password(pdf_password)
+
+            # Cancel button
+            if st.button("❌ Anuluj i Wyślij Inny Plik"):
+                st.session_state.encrypted_pdf_buffer = None
+                st.session_state.encrypted_pdf_filename = None
+                st.session_state.pdf_password_error = None
+                st.rerun()
+
+            # Don't show normal analyze button in password mode
+            analyze_button = False
+        # Normal flow - no encryption
+
         # Process button clicked
         if analyze_button:
             process_invoice(uploaded_file)
@@ -82,15 +147,20 @@ def main():
             display_and_edit_invoice()
 
 
-def process_invoice(uploaded_file):
+def process_invoice(uploaded_file, password=None):
     """Process uploaded invoice through the extraction pipeline"""
 
-    with st.spinner("🤖 Grok analizuje Twoją fakturę..."):
+    # Update spinner text based on password
+    spinner_text = "🤖 Grok analizuje Twoją fakturę..."
+    if password:
+        spinner_text = "🔓 Odszyfrowywanie PDF i analiza..."
+
+    with st.spinner(spinner_text):
         try:
             # Step 1: Prepare image
             st.write("📸 Przetwarzanie obrazu...")
             file_buffer = BytesIO(uploaded_file.read())
-            images_base64 = prepare_image_for_api(file_buffer)
+            images_base64 = prepare_image_for_api(file_buffer, password=password)
 
             # Step 2: Extract data with AI
             st.write("🧠 Wyodrębnianie danych za pomocą AI...")
@@ -101,9 +171,30 @@ def process_invoice(uploaded_file):
             st.session_state.invoice_data = invoice_data
             st.session_state.uploaded_filename = uploaded_file.name
 
+            # Clear encrypted PDF state on success
+            st.session_state.encrypted_pdf_buffer = None
+            st.session_state.encrypted_pdf_filename = None
+            st.session_state.pdf_password_error = None
+
             st.success("✅ Analiza zakończona! Sprawdź i edytuj dane poniżej.")
             st.rerun()
 
+        except PasswordProtectedPDFError as e:
+            # PDF is encrypted
+            if "Invalid password" in str(e):
+                # Wrong password - stay in password mode
+                st.session_state.pdf_password_error = (
+                    "❌ Nieprawidłowe hasło. Spróbuj ponownie."
+                )
+                st.rerun()
+            else:
+                # First encounter - enter password mode
+                uploaded_file.seek(0)
+                st.session_state.encrypted_pdf_buffer = BytesIO(uploaded_file.read())
+                st.session_state.encrypted_pdf_filename = uploaded_file.name
+                st.session_state.pdf_password_error = None
+                st.info("ℹ️ PDF wymaga hasła. Wpisz hasło poniżej.")
+                st.rerun()
         except UnsupportedFormatError as e:
             st.error(f"❌ Nieobsługiwany format pliku: {str(e)}")
         except CorruptedFileError as e:
@@ -111,6 +202,34 @@ def process_invoice(uploaded_file):
         except Exception as e:
             st.error(f"❌ Błąd podczas przetwarzania: {str(e)}")
             st.exception(e)
+
+
+def process_encrypted_pdf_with_password(password: str):
+    """Process previously uploaded encrypted PDF with provided password"""
+    if st.session_state.encrypted_pdf_buffer is None:
+        st.error("❌ Brak zapisanego pliku PDF. Prześlij plik ponownie.")
+        return
+
+    # Create fake uploaded_file object
+    class FakeUploadedFile:
+        def __init__(self, buffer, name):
+            self.buffer = buffer
+            self.name = name
+
+        def read(self):
+            self.buffer.seek(0)
+            return self.buffer.read()
+
+        def seek(self, pos):
+            self.buffer.seek(pos)
+
+    fake_file = FakeUploadedFile(
+        st.session_state.encrypted_pdf_buffer,
+        st.session_state.encrypted_pdf_filename
+    )
+
+    # Process with password
+    process_invoice(fake_file, password=password)
 
 
 def display_and_edit_invoice():

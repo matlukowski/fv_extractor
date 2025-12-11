@@ -105,8 +105,162 @@ Ten moduł odpowiada za warstwę prezentacji (GUI). Służy do:
 | Brak API Key w `.env`                     | Wyświetl `st.warning("⚠️ **Nie znaleziono XAI_API_KEY!**")` z instrukcją konfiguracji po polsku. |
 | Plik uszkodzony                           | Wyświetl `st.error("❌ Uszkodzony plik: {error}")` |
 | Nieobsługiwany format                     | Wyświetl `st.error("❌ Nieobsługiwany format pliku: {error}")` |
+| **PDF chroniony hasłem (nowe)**           | **Try-and-Recover workflow (patrz sekcja 6)** |
 | Błąd podczas przetwarzania                | Wyświetl `st.error("❌ Błąd podczas przetwarzania: {error}")` wraz z `st.exception(e)` |
 | Błąd generowania Excel                    | Wyświetl `st.error("❌ Błąd generowania Excel: {error}")` zamiast przycisku pobierania |
+
+---
+
+## 6. Obsługa PDF Chronionych Hasłem
+
+### 6.1. Session State Management
+
+Aplikacja używa 3 kluczy session_state do zarządzania encrypted PDF:
+
+```python
+st.session_state.encrypted_pdf_buffer = None      # BytesIO z encrypted PDF
+st.session_state.encrypted_pdf_filename = None    # Nazwa pliku
+st.session_state.pdf_password_error = None        # Komunikat błędu
+```
+
+### 6.2. User Flow
+
+#### Scenariusz 1: PDF bez hasła (normal flow)
+```
+Upload PDF → Analyze → Wyniki
+```
+
+#### Scenariusz 2: PDF z hasłem - pierwszy upload
+```
+Upload PDF → Analyze → Backend wykrywa encrypted
+    ↓
+Backend zapisuje buffer w session_state
+    ↓
+st.info("ℹ️ PDF wymaga hasła. Wpisz hasło poniżej.")
+    ↓
+st.rerun() → Wyświetla Password UI
+```
+
+#### Scenariusz 3: Wprowadzanie hasła
+```
+Password UI wyświetlony
+    ↓
+User wpisuje hasło → Kliknie "🔓 Odszyfruj i Analizuj"
+    ↓
+process_encrypted_pdf_with_password(password)
+    ↓
+┌─ Poprawne hasło:
+│   └→ Dekrypcja → Analiza → Wyniki → Clear session_state
+│
+└─ Błędne hasło:
+    └→ st.error("❌ Nieprawidłowe hasło. Spróbuj ponownie.")
+       └→ Password UI pozostaje (możliwość retry)
+```
+
+#### Scenariusz 4: Anulowanie
+```
+User kliknie "❌ Anuluj i Wyślij Inny Plik"
+    ↓
+Clear session_state (encrypted_pdf_buffer, encrypted_pdf_filename, pdf_password_error)
+    ↓
+st.rerun() → Powrót do file uploader
+```
+
+### 6.3. Password UI (Technical Details)
+
+**Lokalizacja:** Między image preview a analyze button w `main()`
+
+**Warunek wyświetlania:**
+```python
+if st.session_state.encrypted_pdf_buffer is not None:
+    # Show password UI
+    # Hide normal analyze button
+```
+
+**Komponenty UI:**
+```python
+st.warning("🔒 **Ten PDF jest chroniony hasłem**")
+
+# Error display (jeśli było błędne hasło)
+if st.session_state.pdf_password_error:
+    st.error(st.session_state.pdf_password_error)
+
+# Password input + Unlock button (2 kolumny)
+col_pass1, col_pass2 = st.columns([3, 1])
+
+with col_pass1:
+    pdf_password = st.text_input(
+        "Wpisz hasło do pliku PDF:",
+        type="password",
+        key="pdf_password_input",
+        help="Hasło jest potrzebne do odszyfrowania pliku"
+    )
+
+with col_pass2:
+    unlock_button = st.button(
+        "🔓 Odszyfruj i Analizuj",
+        type="primary",
+        disabled=not pdf_password  # Disable jeśli puste
+    )
+
+# Cancel button
+st.button("❌ Anuluj i Wyślij Inny Plik")
+```
+
+### 6.4. Backend Integration
+
+**Funkcja `process_invoice(uploaded_file, password=None)`:**
+- Jeśli `password` podane → zmienia spinner text na `"🔓 Odszyfrowywanie PDF i analiza..."`
+- Przekazuje `password` do `prepare_image_for_api(file_buffer, password=password)`
+- Exception handling:
+  ```python
+  except PasswordProtectedPDFError as e:
+      if "Invalid password" in str(e):
+          # Wrong password - stay in password mode
+          st.session_state.pdf_password_error = "❌ Nieprawidłowe hasło..."
+          st.rerun()
+      else:
+          # First encounter - enter password mode
+          st.session_state.encrypted_pdf_buffer = BytesIO(uploaded_file.read())
+          st.session_state.encrypted_pdf_filename = uploaded_file.name
+          st.info("ℹ️ PDF wymaga hasła...")
+          st.rerun()
+  ```
+
+**Funkcja `process_encrypted_pdf_with_password(password: str)`:**
+- Tworzy `FakeUploadedFile` wrapper dla BytesIO z session_state
+- Wywołuje `process_invoice(fake_file, password=password)`
+- Dlaczego FakeUploadedFile? → `process_invoice()` wymaga `.read()` i `.seek()` methods
+
+### 6.5. Security Notes
+
+✅ **Hasło NIE jest przechowywane w session_state**
+- Tylko w local variable `pdf_password` (text_input)
+- Przekazywane bezpośrednio do funkcji
+- Po przetworzeniu → garbage collected
+
+✅ **Encrypted PDF buffer**
+- Przechowywany w `st.session_state.encrypted_pdf_buffer` (in-memory)
+- Automatycznie cleared po:
+  - Successful processing
+  - User cancellation
+  - Upload nowego pliku (różna nazwa)
+
+⚠️ **Deployment recommendation:**
+- **HTTPS ONLY** - hasło wysyłane przez WebSocket między browser a backend
+- Session lifetime = browser session (refresh → strata buffera)
+
+### 6.6. State Lifecycle Table
+
+| Stan | encrypted_pdf_buffer | pdf_password_error | UI Display |
+|------|---------------------|-------------------|------------|
+| Initial | None | None | Normal file uploader |
+| Upload normal PDF | None | None | Analyze button |
+| Upload encrypted PDF | BytesIO | None | Password UI |
+| Wrong password attempt | BytesIO (same) | "❌ Nieprawidłowe..." | Password UI + error |
+| Correct password | None (cleared) | None (cleared) | Results display |
+| Cancel password mode | None (cleared) | None (cleared) | File uploader |
+| Upload different file | None (cleared) | None (cleared) | Analyze button |
 
 ---
 
