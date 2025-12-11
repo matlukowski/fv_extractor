@@ -111,20 +111,16 @@ def check_authentication():
     st.title("🔒 Logowanie")
     st.markdown("Wprowadź hasło aby uzyskać dostęp do aplikacji")
 
-    # Get stored password for pre-filling
-    stored_password = get_stored_password() if 'login_password_value' not in st.session_state else st.session_state.get('login_password_value', '')
-
     password = st.text_input(
         "Hasło:",
         type="password",
-        key="login_password",
-        value=stored_password
+        key="login_password"
     )
 
     # Remember me checkbox
     remember_me = st.checkbox(
         "💾 Zapamiętaj mnie na tym urządzeniu",
-        value=bool(stored_password),
+        value=False,
         help="Hasło zostanie zapisane w przeglądarce (localStorage)"
     )
 
@@ -165,15 +161,16 @@ def main():
     with st.sidebar:
         st.markdown("### 🔐 Sesja")
 
-        # Option to clear saved password
-        if get_stored_password():
-            if st.checkbox("🗑️ Usuń zapisane hasło", value=False):
-                clear_password_from_storage()
-                st.info("Hasło zostanie usunięte przy wylogowaniu")
+        # Option to clear saved password on logout
+        clear_saved = st.checkbox(
+            "🗑️ Usuń zapisane hasło przy wylogowaniu",
+            value=False,
+            help="Wyczyści zapamiętane hasło z przeglądarki"
+        )
 
         if st.button("🚪 Wyloguj", use_container_width=True):
             # Clear saved password if checkbox was checked
-            if st.sidebar and get_stored_password():
+            if clear_saved:
                 clear_password_from_storage()
 
             st.session_state.authenticated = False
