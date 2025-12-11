@@ -8,7 +8,10 @@ Aplikacja posiada wbudowany system logowania zabezpieczający dostęp do funkcjo
 
 - Przy pierwszym wejściu na stronę użytkownik musi wprowadzić hasło
 - Po poprawnym zalogowaniu sesja pozostaje aktywna
+- **Opcja "Zapamiętaj mnie"** - hasło zapisuje się w przeglądarce (localStorage)
+- Przy kolejnym wejściu użytkownik jest automatycznie zalogowany
 - Użytkownik może się wylogować klikając przycisk "Wyloguj" w sidebarze
+- Możliwość usunięcia zapisanego hasła z przeglądarki (checkbox w sidebarze)
 
 ### Konfiguracja hasła
 
@@ -75,6 +78,26 @@ Jeśli chcesz dać komuś dostęp do aplikacji:
 2. Uruchom ponownie aplikację
 3. Wszyscy użytkownicy będą musieli zalogować się ponownie z nowym hasłem
 
+### Funkcja "Zapamiętaj mnie"
+
+Aplikacja posiada opcję **"💾 Zapamiętaj mnie na tym urządzeniu"**:
+
+**Jak działa:**
+- Hasło jest zapisywane w localStorage przeglądarki (lokalnie na Twoim komputerze)
+- Przy kolejnym wejściu na stronę użytkownik jest automatycznie zalogowany
+- Hasło NIE jest wysyłane do żadnego serwera - pozostaje tylko w Twojej przeglądarce
+
+**Bezpieczeństwo:**
+- ✅ Wygodne na prywatnym komputerze/laptopie
+- ⚠️ NIE używaj na komputerach publicznych/współdzielonych!
+- 🗑️ Możesz usunąć zapisane hasło w każdej chwili (checkbox w sidebarze)
+
+**Usunięcie zapisanego hasła:**
+1. Zaloguj się do aplikacji
+2. W sidebarze zaznacz "🗑️ Usuń zapisane hasło"
+3. Kliknij "🚪 Wyloguj"
+4. Hasło zostanie usunięte z przeglądarki
+
 ### FAQ
 
 **Q: Co się stanie jeśli zapomnę hasła?**
@@ -83,8 +106,16 @@ A: Musisz je zresetować w pliku `.env` (lokalnie) lub w Settings → Secrets (S
 **Q: Czy hasło jest bezpieczne?**
 A: Tak, hasło nigdy nie jest wysyłane do żadnego serwera poza Twoim. Jest porównywane lokalnie w aplikacji.
 
+**Q: Czy "Zapamiętaj mnie" jest bezpieczne?**
+A: Hasło jest zapisane w localStorage przeglądarki (lokalnie na Twoim urządzeniu). Jest to bezpieczne na prywatnym komputerze, ale NIE używaj tej opcji na komputerach publicznych.
+
 **Q: Czy mogę mieć różne hasła dla różnych użytkowników?**
 A: Nie w podstawowej wersji. Wszyscy użytkownicy używają tego samego hasła. Jeśli potrzebujesz zarządzania wieloma użytkownikami, rozważ rozbudowę systemu autentykacji.
 
 **Q: Czy sesja wygasa?**
-A: Sesja jest aktywna dopóki użytkownik nie zamknie karty przeglądarki lub nie kliknie "Wyloguj". Streamlit może również resetować sesję po pewnym czasie bezczynności.
+A: Sesja jest aktywna dopóki użytkownik nie zamknie karty przeglądarki lub nie kliknie "Wyloguj". Jeśli zaznaczyłeś "Zapamiętaj mnie", będziesz automatycznie zalogowany przy kolejnym wejściu.
+
+**Q: Jak całkowicie wyczyścić zapisane hasło?**
+A:
+1. Zaloguj się → w sidebarze zaznacz "Usuń zapisane hasło" → Wyloguj
+2. LUB wyczyść localStorage przeglądarki (F12 → Application/Storage → Local Storage → usuń `fv_extractor_password`)

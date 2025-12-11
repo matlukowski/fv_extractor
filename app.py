@@ -5,6 +5,7 @@ Main entry point for the invoice data extraction tool.
 Upload invoice images (PDF, JPG, PNG) → AI extracts data → Edit → Export to Excel
 """
 import streamlit as st
+import streamlit.components.v1 as components
 import os
 from io import BytesIO
 from datetime import date
@@ -44,6 +45,42 @@ header {visibility: hidden;}
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 
+def get_stored_password():
+    """Get password from browser's localStorage using JavaScript"""
+    stored_password_html = """
+    <script>
+        const savedPassword = localStorage.getItem('fv_extractor_password');
+        if (savedPassword) {
+            window.parent.postMessage({type: 'streamlit:setComponentValue', value: savedPassword}, '*');
+        } else {
+            window.parent.postMessage({type: 'streamlit:setComponentValue', value: ''}, '*');
+        }
+    </script>
+    """
+    stored = components.html(stored_password_html, height=0)
+    return stored if stored else ""
+
+
+def save_password_to_storage(password):
+    """Save password to browser's localStorage"""
+    save_html = f"""
+    <script>
+        localStorage.setItem('fv_extractor_password', '{password}');
+    </script>
+    """
+    components.html(save_html, height=0)
+
+
+def clear_password_from_storage():
+    """Clear password from browser's localStorage"""
+    clear_html = """
+    <script>
+        localStorage.removeItem('fv_extractor_password');
+    </script>
+    """
+    components.html(clear_html, height=0)
+
+
 def check_authentication():
     """
     Check if user is authenticated with password.
@@ -62,21 +99,52 @@ def check_authentication():
     if st.session_state.get('authenticated', False):
         return True
 
+    # Try to auto-login from stored password
+    if 'auto_login_attempted' not in st.session_state:
+        st.session_state.auto_login_attempted = True
+        stored_password = get_stored_password()
+        if stored_password and stored_password == correct_password:
+            st.session_state.authenticated = True
+            st.rerun()
+
     # Show login form
     st.title("🔒 Logowanie")
     st.markdown("Wprowadź hasło aby uzyskać dostęp do aplikacji")
 
-    password = st.text_input("Hasło:", type="password", key="login_password")
+    # Get stored password for pre-filling
+    stored_password = get_stored_password() if 'login_password_value' not in st.session_state else st.session_state.get('login_password_value', '')
+
+    password = st.text_input(
+        "Hasło:",
+        type="password",
+        key="login_password",
+        value=stored_password
+    )
+
+    # Remember me checkbox
+    remember_me = st.checkbox(
+        "💾 Zapamiętaj mnie na tym urządzeniu",
+        value=bool(stored_password),
+        help="Hasło zostanie zapisane w przeglądarce (localStorage)"
+    )
 
     col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
         if st.button("🔓 Zaloguj", type="primary", use_container_width=True):
             if password == correct_password:
                 st.session_state.authenticated = True
+
+                # Save password if remember me is checked
+                if remember_me:
+                    save_password_to_storage(password)
+                else:
+                    clear_password_from_storage()
+
                 st.success("✅ Zalogowano pomyślnie!")
                 st.rerun()
             else:
                 st.error("❌ Nieprawidłowe hasło!")
+                clear_password_from_storage()
 
     st.info(
         "**Brak dostępu?**\n\n"
@@ -96,7 +164,18 @@ def main():
     # Add logout button in sidebar
     with st.sidebar:
         st.markdown("### 🔐 Sesja")
+
+        # Option to clear saved password
+        if get_stored_password():
+            if st.checkbox("🗑️ Usuń zapisane hasło", value=False):
+                clear_password_from_storage()
+                st.info("Hasło zostanie usunięte przy wylogowaniu")
+
         if st.button("🚪 Wyloguj", use_container_width=True):
+            # Clear saved password if checkbox was checked
+            if st.sidebar and get_stored_password():
+                clear_password_from_storage()
+
             st.session_state.authenticated = False
             st.session_state.clear()
             st.rerun()
