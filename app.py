@@ -32,6 +32,17 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# Hide Streamlit default elements (Deploy button, menu)
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+.stDeployButton {display: none;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 
 def main():
     """Main application logic"""
@@ -40,8 +51,11 @@ def main():
     st.title("📄 Ekstraktor Faktur AI")
     st.markdown("Automatyczna ekstrakcja danych z faktur przy użyciu AI")
 
-    # Check API key
+    # Check API key (supports both .env and Streamlit Cloud secrets)
     api_key = os.getenv("XAI_API_KEY")
+    if not api_key and hasattr(st, 'secrets') and 'XAI_API_KEY' in st.secrets:
+        api_key = st.secrets["XAI_API_KEY"]
+
     if not api_key:
         st.warning(
             "⚠️ **Nie znaleziono XAI_API_KEY!**\n\n"
@@ -53,6 +67,9 @@ def main():
             "Po dodaniu klucza, uruchom ponownie aplikację."
         )
         return
+
+    # Store API key in session state for use in callbacks
+    st.session_state.api_key = api_key
 
     # Initialize session state for encrypted PDF handling
     if 'encrypted_pdf_buffer' not in st.session_state:
@@ -164,7 +181,8 @@ def process_invoice(uploaded_file, password=None):
 
             # Step 2: Extract data with AI
             st.write("🧠 Wyodrębnianie danych za pomocą AI...")
-            client = GrokClient()
+            api_key = st.session_state.get('api_key') or os.getenv("XAI_API_KEY")
+            client = GrokClient(api_key=api_key)
             invoice_data = client.extract_data(images_base64)
 
             # Step 3: Store in session state

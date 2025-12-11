@@ -1,0 +1,29 @@
+[client]
+# Disable usage stats collection
+gatherUsageStats = false
+
+[browser]
+# Disable the "Deploy" button in the UI
+serverAddress = "localhost"
+gatherUsageStats = false
+
+[server]
+# Disable file watcher for better performance
+fileWatcherType = "none"
+
+[ui]
+# Hide the hamburger menu items
+hideTopBar = false
+hideSidebarNav = false
+
+[runner]
+# Disable magic commands
+magicEnabled = false
+
+[theme]
+# Optional: Custom theme (uncomment to use)
+# primaryColor = "#F63366"
+# backgroundColor = "#FFFFFF"
+# secondaryBackgroundColor = "#F0F2F6"
+# textColor = "#262730"
+# font = "sans serif"
