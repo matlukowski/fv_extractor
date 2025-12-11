@@ -44,8 +44,62 @@ header {visibility: hidden;}
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 
+def check_authentication():
+    """
+    Check if user is authenticated with password.
+    Returns True if authenticated, False otherwise.
+    """
+    # Get password from environment or secrets
+    correct_password = os.getenv("APP_PASSWORD")
+    if not correct_password and hasattr(st, 'secrets') and 'APP_PASSWORD' in st.secrets:
+        correct_password = st.secrets["APP_PASSWORD"]
+
+    # If no password is set, allow access (backward compatibility)
+    if not correct_password:
+        return True
+
+    # Check if user is already authenticated in session
+    if st.session_state.get('authenticated', False):
+        return True
+
+    # Show login form
+    st.title("🔒 Logowanie")
+    st.markdown("Wprowadź hasło aby uzyskać dostęp do aplikacji")
+
+    password = st.text_input("Hasło:", type="password", key="login_password")
+
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col1:
+        if st.button("🔓 Zaloguj", type="primary", use_container_width=True):
+            if password == correct_password:
+                st.session_state.authenticated = True
+                st.success("✅ Zalogowano pomyślnie!")
+                st.rerun()
+            else:
+                st.error("❌ Nieprawidłowe hasło!")
+
+    st.info(
+        "**Brak dostępu?**\n\n"
+        "Skontaktuj się z administratorem aby otrzymać hasło."
+    )
+
+    return False
+
+
 def main():
     """Main application logic"""
+
+    # Check authentication first
+    if not check_authentication():
+        return  # Stop execution if not authenticated
+
+    # Add logout button in sidebar
+    with st.sidebar:
+        st.markdown("### 🔐 Sesja")
+        if st.button("🚪 Wyloguj", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.clear()
+            st.rerun()
 
     # Header
     st.title("📄 Ekstraktor Faktur AI")

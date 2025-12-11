@@ -21,13 +21,17 @@
 
 ### 3. Konfiguracja sekretów (WAŻNE!)
 
-W sekcji **"Secrets"** dodaj swój klucz API:
+W sekcji **"Secrets"** dodaj swój klucz API i hasło aplikacji:
 
 ```toml
 XAI_API_KEY = "twoj_prawdziwy_klucz_api_z_xai"
+APP_PASSWORD = "twoje_bezpieczne_haslo"
 ```
 
-⚠️ **Uwaga**: Bez tego aplikacja nie będzie działać!
+⚠️ **Uwaga**:
+- Bez `XAI_API_KEY` aplikacja nie będzie działać!
+- `APP_PASSWORD` chroni aplikację - tylko osoby z hasłem będą mogły z niej korzystać
+- Używaj silnego hasła (min. 12 znaków, małe/wielkie litery, cyfry, znaki specjalne)
 
 ### 4. Deploy
 

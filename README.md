@@ -6,14 +6,15 @@ Extract structured data from invoice files (PDF, JPG, PNG) using Grok Vision AI,
 
 ## ✨ Features
 
+- **🔒 Password Protection:** Optional authentication to secure access
 - **AI-Powered Extraction:** Grok Vision API automatically reads invoice data
-- **Multiple Formats:** Support for PDF, JPG, and PNG files
+- **Multiple Formats:** Support for PDF, JPG, and PNG files (including password-protected PDFs)
 - **Smart Processing:** Intelligent image optimization and preprocessing
 - **Human-in-the-Loop:** Review and edit extracted data before export
 - **Excel Export:** Professional formatted `.xlsx` files with Polish headers
 - **Privacy-First:** Files processed in-memory only (no storage)
 - **Data Validation:** Pydantic models ensure data integrity
-- **Comprehensive Tests:** 105 unit tests with 92% coverage
+- **Comprehensive Tests:** 111 unit tests with high coverage
 
 ## Setup
 
@@ -33,13 +34,16 @@ Copy `.env.example` to `.env`:
 cp .env.example .env
 ```
 
-Edit `.env` and add your xAI Grok API key:
+Edit `.env` and add your xAI Grok API key and application password:
 
 ```env
 XAI_API_KEY=your_actual_api_key_here
+APP_PASSWORD=your_secure_password_here
 ```
 
 **Get your API key:** https://console.x.ai/
+
+**Note:** `APP_PASSWORD` is optional. If set, users must enter this password to access the application. Leave empty to disable authentication.
 
 ### 3. Run Application
 
@@ -51,11 +55,12 @@ The app will open in your browser at `http://localhost:8501`
 
 ## 📖 Usage
 
-1. **Upload Invoice:** Click "Browse files" and select an invoice (PDF/JPG/PNG)
-2. **Analyze:** Click "Analyze Invoice" button
-3. **Review:** AI extracts data automatically - review for accuracy
-4. **Edit:** Modify any incorrect fields, add/remove items
-5. **Export:** Download formatted Excel file
+1. **Login:** Enter application password (if authentication is enabled)
+2. **Upload Invoice:** Click "Browse files" and select an invoice (PDF/JPG/PNG)
+3. **Analyze:** Click "Analyze Invoice" button
+4. **Review:** AI extracts data automatically - review for accuracy
+5. **Edit:** Modify any incorrect fields, add/remove items
+6. **Export:** Download formatted Excel file
 
 ## 🧪 Testing
 
